@@ -633,7 +633,7 @@ def hyperparamater_testing(parameters):
     Decision: Batch normalization to be implemented with learning rate 0.01 and without weight decay in the next experiments to maintain simplicity and faster run-time. Weight decay only provides modest test score improvements at high run time cost.
 
 <p align="center">
-  <img src="assets/experiment3.png">
+  <img src="assets/experiment3.png" height ='300'>
   <br>
   Impact of batch normalization and weight decay
 </p>  
@@ -650,7 +650,7 @@ def hyperparamater_testing(parameters):
     Decision: Dropout will not be implemented in the follow-on experiments. Leaky relu will be used as activation as it displays better combination of test scores with lower run times.
 
 <p align="center">
-  <img src="assets/experiment4.png">
+  <img src="assets/experiment4.png" height ='300'>
   <br>
   Impact of dropout
 </p>
@@ -720,22 +720,22 @@ Parameters tested are highlighted in blue. Parameters chosen after testing are i
 
 References:
 
-Albon, C. (2018). Machine learning with python cookbook: Practical solutions from preprocessing to deep learning. " O'Reilly Media, Inc.".   
-Al-Faiz, M. Z., Ibrahim, A. A., & Hadi, S. M. (2018). The effect of Z-Score standardization (normalization) on binary input due the speed of learning in back-propagation neural network. Iraqi Journal of Information and Communication Technology, 1(3), 42-48. 
-Assos, A. (2023). Convergence of mini batch SGD Seminar in Undergrad Research, Massachusetts Institute of Technology. https://www.mit.edu/people/assos/files/6_UAR.pdf  
-Goodfellow, I., Bengio, Y., & Courville, A. (2016). Deep learning. MIT press.   
-Gordon-Rodriguez, E., Loaiza-Ganem, G., Pleiss, G., & Cunningham, J. P. (2020). Uses and Abuses of the Cross-Entropy Loss: Case Studies in Modern Deep Learning Proceedings on "I Can't Believe It's Not Better!" at NeurIPS Workshops, Proceedings of Machine Learning Research. https://proceedings.mlr.press/v137/gordon-rodriguez20a.html  
-How does batch normalization affect the learning rate and the weight decay in neural networks?  Retrieved 2024-04-05 from https://www.linkedin.com/advice/0/how-does-batch-normalization-affect  
-Kingma, D. P., & Ba, J. (2014). Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980.   
-Kurbiel, T. (2021). Derivative of the softmax function and the categorical cross-entropy loss. Retrieved 04-08 from https://towardsdatascience.com/derivative-of-the-softmax-function-and-the-categorical-cross-entropy-loss-ffceefc081d1  
-LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. Nature, 521(7553), 436-444. https://doi.org/10.1038/nature14539   
-Patel, J. (2022, 03-30). Sigmoid function: derivative and working mechanism. Analytics Vidhya. https://www.analyticsvidhya.com/blog/2022/12/sigmoid-function-derivative-and-working-mechanism/  
-Powers, D. M. (2020). Evaluation: from precision, recall and F-measure to ROC, informedness, markedness and correlation. arXiv preprint arXiv:2010.16061.   
-Sharma, S. (2022). Activation functions in neural networks. Medium. Retrieved 30 March from https://towardsdatascience.com/activation-functions-neural-networks-1cbd9f8d91d6  
-Sharma, S., Sharma, S., & Athaiya, A. (2017). Activation functions in neural networks. Towards Data Sci, 6(12), 310-316.   
-Twomey, J. M., & Smith, A. E. (1997). Validation and verification. Artificial neural networks for civil engineers: Fundamentals and applications, 44-64.   
-Vallés-Pérez, I., Soria-Olivas, E., Martínez-Sober, M., Serrano-López, A. J., Vila-Francés, J., & Gómez-Sanchís, J. (2023). Empirical study of the modulus as activation function in computer vision applications. Engineering Applications of Artificial Intelligence, 120, 105863. https://doi.org/https://doi.org/10.1016/j.engappai.2023.105863   
-Wei, D. (2024, 5 April). Demystifying the adam optimizer in machine learning. Medium. https://medium.com/@weidagang/demystifying-the-adam-optimizer-in-machine-learning-4401d162cb9  
+- Albon, C. (2018). Machine learning with python cookbook: Practical solutions from preprocessing to deep learning. " O'Reilly Media, Inc.".   
+- Al-Faiz, M. Z., Ibrahim, A. A., & Hadi, S. M. (2018). The effect of Z-Score standardization (normalization) on binary input due the speed of learning in back-propagation neural network. Iraqi Journal of Information and Communication Technology, 1(3), 42-48. 
+- Assos, A. (2023). Convergence of mini batch SGD Seminar in Undergrad Research, Massachusetts Institute of Technology. https://www.mit.edu/people/assos/files/6_UAR.pdf  
+- Goodfellow, I., Bengio, Y., & Courville, A. (2016). Deep learning. MIT press.   
+- Gordon-Rodriguez, E., Loaiza-Ganem, G., Pleiss, G., & Cunningham, J. P. (2020). Uses and Abuses of the Cross-Entropy Loss: Case Studies in Modern Deep Learning Proceedings on "I Can't Believe It's Not Better!" at NeurIPS Workshops, Proceedings of Machine Learning Research. https://proceedings.mlr.press/v137/gordon-rodriguez20a.html  
+- How does batch normalization affect the learning rate and the weight decay in neural networks?  Retrieved 2024-04-05 from https://www.linkedin.com/advice/0/how-does-batch-normalization-affect  
+- Kingma, D. P., & Ba, J. (2014). Adam: A method for stochastic optimization. arXiv preprint arXiv:1412.6980.   
+- Kurbiel, T. (2021). Derivative of the softmax function and the categorical cross-entropy loss. Retrieved 04-08 from https://towardsdatascience.com/derivative-of-the-softmax-function-and-the-categorical-cross-entropy-loss-ffceefc081d1  
+- LeCun, Y., Bengio, Y., & Hinton, G. (2015). Deep learning. Nature, 521(7553), 436-444. https://doi.org/10.1038/nature14539   
+- Patel, J. (2022, 03-30). Sigmoid function: derivative and working mechanism. Analytics Vidhya. https://www.analyticsvidhya.com/blog/2022/12/sigmoid-function-derivative-and-working-mechanism/  
+- Powers, D. M. (2020). Evaluation: from precision, recall and F-measure to ROC, informedness, markedness and correlation. arXiv preprint arXiv:2010.16061.   
+- Sharma, S. (2022). Activation functions in neural networks. Medium. Retrieved 30 March from https://towardsdatascience.com/activation-functions-neural-networks-1cbd9f8d91d6  
+- Sharma, S., Sharma, S., & Athaiya, A. (2017). Activation functions in neural networks. Towards Data Sci, 6(12), 310-316.   
+- Twomey, J. M., & Smith, A. E. (1997). Validation and verification. Artificial neural networks for civil engineers: Fundamentals and applications, 44-64.   
+- Vallés-Pérez, I., Soria-Olivas, E., Martínez-Sober, M., Serrano-López, A. J., Vila-Francés, J., & Gómez-Sanchís, J. (2023). Empirical study of the modulus as activation function in computer vision applications. Engineering Applications of Artificial Intelligence, 120, 105863. https://doi.org/https://doi.org/10.1016/j.engappai.2023.105863   
+- Wei, D. (2024, 5 April). Demystifying the adam optimizer in machine learning. Medium. https://medium.com/@weidagang/demystifying-the-adam-optimizer-in-machine-learning-4401d162cb9  
 
 
 
