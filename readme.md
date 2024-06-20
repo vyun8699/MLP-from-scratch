@@ -51,15 +51,111 @@ Here comes the wall of text (sorry!).
   A simplified view of an MLP network.
 </p>
 
+```md
+Snippets of base code are provided here to showcase how each component functions.   
+These snippets are simplified versions of actual implementation for this project.  
+Please see the ipynb file for actual implementation.  
+```
+
 `Base architecture`: deep learning models consists of input, hidden, and output layers through which information is propagated and processed through. A model may have one or more hidden layers and the choice of optimal number of hidden layers can be determined by considering test scores and run times. Deeper and wider models can learn more parameters from input at higher computational costs, vice versa. As information is propagated through the neural network, each neuron (e.g. a single node in the neural network) takes in one or more input multiplied by weights and adjusted by a bias factor to produce an adjusted input. The adjusted input is then further processed through a non-linear activation function to produce a convex output for that layer. The process outlined below are repeated until all training data has been ingested. A complete cycle of training loop (e.g. when all training data has been used once) is called an 'epoch':
 
 - `Forward pass (left to right)`: (i) input data is propagated forward through a linear transformation to match the output dimension, (ii) the transformed input is then processed through the activation function to create a transformed output for the given layer, (iii) the output of each layer is then passed as input for the layer after it, which allows chaining of functions in each layer, (iv) predicted output is produced in the output layer, at the end of the forward pass. 
 
+```python
+def forward(self, input, dropout_rate, is_train = True, batchnorm_switch = True):
+
+  #linear transformation
+  lin_output = np.dot(input, self.W) + self.b 
+  self.output = lin_output
+
+  #apply activation function
+  if self.activation:
+    self.output = self.activation(self.output)
+
+  self.input=input
+
+  return self.output
+```
+
 - `Loss calculation`: an objective function / loss function is used to calculate the degree of error between actual and predicted output. The loss function produces a larger output for a larger error, vice versa. This allows the model to compute gradients and adjust parameters to self-correct its prediction during the backward pass. The loss function used in this model is the 'criterion cross entropy', which is commonly used for multi-class classifications.
+
+```python
+def criterion_cross_entropy(self, y, y_hat, batch_size, eps=1e-9):
+    
+  activation_deriv=Activation(self.activation[-1]).f_deriv
+  
+  #one hot encode y to match shape of y_hat, value is 0 everywhere, 1 for the positive column
+  num_classes = y_hat.shape[1] 
+  num_samples = y.shape[0]
+  y_one_hot = np.zeros((num_samples,num_classes)) 
+  y = y.flatten().astype(int)
+  y_one_hot[np.arange(num_samples),y] = 1 
+
+  # calculate loss, add epsilon to avoid log 0
+  loss = np.sum(- y_one_hot * np.log(y_hat + eps)) /  batch_size #adjusting loss by batch_size for minibatch
+  
+  #calculate delta of output layer 
+  delta = activation_deriv(y_hat, y_one_hot)
+
+  #return loss and delta
+  return loss, delta
+```
 
 - `Backward pass (right to left)`: Errors from the predicted output can be used to calculate gradients from the output layer, all the way to the input layer via chain rule. Gradients descent is the ‘step’ taken toward the direction which minimizes the loss function. This direction of loss minimization can be calculated as the derivative of the loss function. The resulting derivative value is then multiplied to the learning rate to determine the size of step taken.
 
+```python
+ def backward(self, delta, batchnorm_switch):         
+
+  #gradient
+  self.grad_W = np.dot(np.atleast_2d(self.input).T, np.atleast_2d(delta))
+  self.grad_b = np.sum(delta, axis = 0) 
+
+  #dropout
+  delta *= self.dropout_mask
+
+  #batchnorm
+  if batchnorm_switch:
+      delta = self.batchnorm_backward(delta)
+
+  #linear transformation
+  if self.activation_deriv: 
+      delta = np.dot(delta, self.W.T) * self.activation_deriv(self.input)
+
+
+  return delta
+```
+
 - `Update`: Weights and biases of the neurons in each layer are updated according to the gradient calculated during via gradient descent. 
+
+```python
+def update(self,momentum_gamma,lr, weight_decay, batchnorm_switch, adam_switch, adam_learning_rate):
+
+  for layer in self.layers:
+      assert layer.W.shape == layer.grad_W.shape, f'mismatch in W{layer.W.shape} and grad_W {layer.grad_W.shape} shapes'
+      assert layer.b.shape == layer.grad_b.shape, f'mismatch in b {layer.b.shape} and grad_b shapes {layer.grad_b.shape}'
+      
+      #call momentum from HiddenLayer to update V values
+      layer.momentum(momentum_gamma,lr)
+      
+      #call weightdecay from hiddenlayer to update V values
+      layer.weightdecay(lr, weight_decay)
+
+      #apply adjustments to V_W to W
+      if adam_switch:
+          self.adam_counter += 1
+          adam_W, adam_b = layer.adam(self.adam_counter, adam_learning_rate = adam_learning_rate, beta1 = 0.9, beta2 = 0.99, eps = 1e-9, adam_switch = True)
+          layer.W -= adam_W
+          layer.b -= adam_b
+      else:
+          layer.W -= layer.V_W
+          layer.b -= layer.V_b
+
+      #batchnorm update
+      if batchnorm_switch:
+          layer.gamma -= lr * layer.grad_gamma
+          layer.beta -= lr * layer.grad_beta
+```
+
 
 `Activation functios`: are mathematical functions used in neurons which applies non-linearity to input and produces convex output. Activation functions implemented in the model are explained below:
 
@@ -144,6 +240,24 @@ To speed up the training process and increase model robustness, several methods 
 
     - `Mini Batch Gradient Descent` takes a batch size value between SGD and Batch Gradient Descent.  The Mini Batch Gradient Descent is beneficial as it is customizable to match the existing computing capacity and characteristic of the dataset, thus achieving some computing benefits while maintaining some fineness of SGD. 
 
+```python
+def getBatch(self, X,y, batch_size):
+# minibatch implementation drops last batch to ensure consistency/stability of training data fed to the model.
+
+  #exceptions
+  if X.shape[0] != y.shape[0]:
+    raise ValueError(f'length of data ({X.shape[0]}) not equal to length of label ({y.shape[0]})')
+  if batch_size > X.shape[0]:
+    raise ValueError(f'batch_size = {batch_size} > data count: {X.shape[0]}')
+
+  #mini batch 
+  if batch_size <= X.shape[0]:
+    # for loop below drops the last batch, just in case it is too small
+    for start_index in range(0, X.shape[0] - batch_size + 1, batch_size):
+        end_index = min(start_index + batch_size, X.shape[0])
+        yield X[start_index:end_index], y[start_index:end_index]
+```
+
 - `Regularization`: are techniques/methods used to avoid overfitting. Deep learning models are prone to “memorizing” patterns of dataset it is trained on, which decreases its ability to generalize when presented with an unseen dataset. Several regularization techniques used in this study: 
 
    - `Early stopping`: allows the model to stop training early when the model performance does not improve during evaluation. Specific to this study, early stopping is divided into two stages: (i) Stage 1: the model is trained on the training dataset and is evaluated periodically on the validation set. This stage is stopped when validation score does not improve after a specified number of cycles, (ii) Stage 2: The training process is continued on the combined training and validation datasets until the model achieves the training score at the end of Stage 1 or the maximum number of epochs is reached. Note: early stopping is used in our experiments to limit the number of epochs run and maintain computing efficiency.
@@ -156,9 +270,37 @@ To speed up the training process and increase model robustness, several methods 
 
    - `Weight decay`: adds a penalty to the loss function which slows down parameter updates by multiplying gradients with a gamma factor. Weight decay must be implemented with a degree of conservatism as too high a gamma value may entrap the model in a local minimum.
 
+```python
+def weightdecay(self, lr, weight_decay):
+    self.W += lr * (weight_decay * self.W)
+```
+
    - `Dropout`: removes neurons from the hidden layers based on the probability p% to ensure network robustness. By switching off nodes randomly, dropout forces the use of nodes otherwise ignored without dropout. Dropout effectively implements model parallelization which increases robustness but also the size and iteration of the model.  
 
+```python
+def dropout(self, is_train, dropout_rate):
+    
+  if is_train and dropout_rate > 0.0:
+    self.dropout_mask = (np.random.rand(*self.output.shape) < (1 - dropout_rate))
+    if np.isnan(self.dropout_mask).any() or np.isinf(self.dropout_mask).any():
+      print("Detected NaN or Inf in dropout_mask in dropout")
+      
+  else:
+    self.dropout_mask = np.ones_like(self.output)        
+
+  self.output *= self.dropout_mask
+  self.output *= 1/(1-dropout_rate)
+```
+
    - `Momentum in SGD`: the Stochastic gradient descent has some weaknesses in deep learning whereby it may get stuck in a region where the gradients are flat (also known as 'saddle points'). The use of momentum helps our gradient descent to escape these saddle points so it is less likely to get stuck. Note: Momentum is indirectly implemented through ADAM optimizer for this exercise.
+
+```python
+def momentum(self, momentum_gamma, lr):
+        
+  self.V_W = momentum_gamma * self.V_W + lr * self.grad_W
+  self.V_b = momentum_gamma * self.V_b + lr * self.grad_b 
+```
+
 
    - `Batch normalization`: as data is processed and transformed in each hidden layer, its value may not be properly fed to later layers in a deep learning model. This is known as co-variate shift. Batch normalization reparametrizes the input of each layer using z-score normalization stated above to remove the effects of covariate shift in deeper networks and it allows the full use of all nodes in every layer. Batch normalization provides net benefits in overall run-times, even if the individual epoch runtimes increase due to additional calculation involved in normalizing input for every layer. Batch normalization introduces additive and multiplicative noise which presents a regularizing effect, making dropout unnecessary. 
 
@@ -168,194 +310,82 @@ To speed up the training process and increase model robustness, several methods 
     Batch normalization alleviates the impact of covariate shift. All nodes are properly fed with information.
   </p>
 
+```python
+def batchnorm_forward(self,input, is_train = True, bn_momentum = 0.9, eps = 1e-9):
+
+  if self.gamma is None:
+    self.gamma = np.ones((input.shape[-1]))
+    self.beta = np.zeros((input.shape[-1]))
+    self.grad_gamma = np.ones((input.shape))
+    self.grad_beta = np.zeros((input.shape[-1]))
+
+  if is_train:
+    #calculate mean, variance, and normalized input
+    batch_mean = np.mean(input, axis = 0)
+    batch_var = np.var(input, axis = 0)
+    batch_std = np.sqrt(batch_var + eps)
+    input_centered = input - batch_mean
+    input_normalized = input_centered/np.sqrt(batch_var + eps) #epsilon introduced to avoid divide by zero
+
+    #use self.cache so values can be reused during backward pass
+    self.cache = (input, input_normalized, batch_mean, batch_var)
+
+    output = input_normalized * self.gamma + self.beta
+
+    self.running_mean = bn_momentum * self.running_mean + (1-bn_momentum) * batch_mean
+    self.running_var = bn_momentum * self.running_var + (1-bn_momentum) * batch_var
+
+    self.cache = (input_normalized, input_centered, batch_std)
+
+  else:
+    input_normalized = (input - self.running_mean)/np.sqrt(self.running_var + eps)
+    output = self.gamma * input_normalized + self.beta
+
+  return output
+
+def batchnorm_backward(self, delta):
+
+  #print('start bn backward')
+  output_normalized, output_centered, batch_std = self.cache
+  
+  N,D = delta.shape
+  
+  self.grad_gamma = np.sum(delta * output_normalized, axis = 0)
+  self.grad_beta = np.sum(delta, axis = 0)
+
+  dx_normalized = delta * self.gamma
+  dx_centered = dx_normalized / batch_std
+  dmean = np.sum(-dx_centered, axis = 0) + 2/N * np.sum(output_centered, axis=0)
+  dstd = np.sum((dx_normalized * output_centered * - batch_std**(-2)), axis = 0)
+  dvar = dstd / 2/ batch_std
+  dx = dx_centered + (dmean + dvar * 2 * output_centered) / N
+  return dx
+```
+
    - `ADAM optimisation`: ADAM is an optimization technique created to utilise first and second moments to adapt the learning rate. Compared to the previous optimisation    technique such as RMSprop and AdaGrad where only the second moment is used, the ADAM optimisation converges quicker and develop resistance to noise in a dataset. ADAM optimizers contain the capabilities from SGD with momentum as well as RMSprop, which means it could decrease and increase the learning rate through the manipulation of the beta values depending on how large the gradient is.
 
 ```python
-class HiddenLayer(object):    
-    
-    def __init__(self,n_in, n_out, activation_last_layer='softmax',activation='relu', W=None, b=None, batch_size = 1, batchnorm_switch = True):
-        
-        self.input=None
-        self.activation=Activation(activation).f
-        
-        # activation deriv of last layer
-        self.activation_deriv=None
-        if activation_last_layer:
-            self.activation_deriv=Activation(activation_last_layer).f_deriv
+def adam(self, iter, adam_learning_rate = 0.1, beta1 = 0.9, beta2 = 0.99, eps = 1e-9, adam_switch = True):
 
-        # Set Weight to small values
-        self.W = np.random.uniform(
-                low=-np.sqrt(6. / (n_in + n_out)),
-                high=np.sqrt(6. / (n_in + n_out)),
-                size=(n_in, n_out)
-        )
+  #momentum
+  self.V_dW = beta1 * self.V_dW + (1-beta1) * self.grad_W
+  self.V_db = beta1 * self.V_db + (1-beta1) * self.grad_b
+  
+  #rms prop
+  self.S_dW = beta2 * self.S_dW + (1-beta2) * (self.grad_W ** 2)
+  self.S_db = beta2 * self.S_db + (1-beta2) * (self.grad_b ** 2)
+  
+  #correction
+  self.V_dW = self.V_dW / (1 - (beta1 ** iter))
+  self.V_db = self.V_db / (1 - (beta1 ** iter))
+  self.S_dW = self.S_dW / (1 - (beta2 ** iter))
+  self.S_db = self.S_db / (1 - (beta2 ** iter))
 
-        # Set bias to zero, dimension to match output 
-        self.b = np.zeros(n_out,)
-        
-        # we set the size of weight and bias gradients
-        self.grad_W = np.zeros(self.W.shape)
-        self.grad_b = np.zeros(self.b.shape)
-        
-        #initialize momentum to zero, match size to weight and bias
-        self.V_W = np.zeros(self.W.shape)
-        self.V_b = np.zeros(self.b.shape)
-
-        #initialize dropout mask to None
-        self.dropout_mask = None
-
-        #initialize parameters for batch normalization (gamma = scale, beta = shift)
-        self.gamma = None
-        self.beta = None
-        self.grad_gamma = None
-        self.grad_beta = None
-        self.running_mean = np.zeros((batch_size,n_out)) #running mean value for each layer, to be used in val and test
-        self.running_var = np.zeros((batch_size,n_out)) #running var value for each layer, to be used in val and test
-        self.cache = None
-
-        #initialize adam (momentum and RMS prop)
-        self.V_dW = np.zeros(self.W.shape)
-        self.S_dW = np.zeros(self.W.shape)
-        self.V_db = np.zeros(self.b.shape)
-        self.S_db = np.zeros(self.b.shape)
- 
-    def forward(self, input, dropout_rate, is_train = True, batchnorm_switch = True):
-
-        #linear transformation
-        lin_output = np.dot(input, self.W) + self.b 
-        
-        #batchnorm
-        if batchnorm_switch:
-            lin_output = self.batchnorm_forward(lin_output, is_train)
-            #print(f'shape of batchnorm output: {lin_output.shape}')
-
-        self.output = lin_output
-
-        #dropout
-        self.dropout(is_train, dropout_rate)
-        
-        if self.activation:
-            self.output = self.activation(self.output)
-        
-        self.input=input
-
-        return self.output
-    
-    def backward(self, delta, batchnorm_switch):         
-
-        #gradient
-        self.grad_W = np.dot(np.atleast_2d(self.input).T, np.atleast_2d(delta))
-        self.grad_b = np.sum(delta, axis = 0) 
-
-        #dropout
-        delta *= self.dropout_mask
-
-        #batchnorm
-        if batchnorm_switch:
-            delta = self.batchnorm_backward(delta)
-
-        #linear transformation
-        if self.activation_deriv: 
-            delta = np.dot(delta, self.W.T) * self.activation_deriv(self.input)
-
-    
-        return delta
-    
-    def momentum(self, momentum_gamma, lr):
-        
-        self.V_W = momentum_gamma * self.V_W + lr * self.grad_W
-        self.V_b = momentum_gamma * self.V_b + lr * self.grad_b 
-
-    def weightdecay(self, lr, weight_decay):
-        self.W += lr * (weight_decay * self.W)
-
-    def dropout(self, is_train, dropout_rate):
-        
-        if is_train and dropout_rate > 0.0:
-            self.dropout_mask = (np.random.rand(*self.output.shape) < (1 - dropout_rate))
-            if np.isnan(self.dropout_mask).any() or np.isinf(self.dropout_mask).any():
-                print("Detected NaN or Inf in dropout_mask in dropout")
-            
-        else:
-            self.dropout_mask = np.ones_like(self.output)        
-
-        self.output *= self.dropout_mask
-        self.output *= 1/(1-dropout_rate)
-    
-    def batchnorm_forward(self,input, is_train = True, bn_momentum = 0.9, eps = 1e-9):
-
-        if self.gamma is None:
-            self.gamma = np.ones((input.shape[-1]))
-            self.beta = np.zeros((input.shape[-1]))
-            self.grad_gamma = np.ones((input.shape))
-            self.grad_beta = np.zeros((input.shape[-1]))
-
-        if is_train:
-            #calculate mean, variance, and normalized input
-            batch_mean = np.mean(input, axis = 0)
-            batch_var = np.var(input, axis = 0)
-            batch_std = np.sqrt(batch_var + eps)
-            input_centered = input - batch_mean
-            input_normalized = input_centered/np.sqrt(batch_var + eps) #epsilon introduced to avoid divide by zero
-
-            #use self.cache so values can be reused during backward pass
-            self.cache = (input, input_normalized, batch_mean, batch_var)
-
-            output = input_normalized * self.gamma + self.beta
-
-            self.running_mean = bn_momentum * self.running_mean + (1-bn_momentum) * batch_mean
-            self.running_var = bn_momentum * self.running_var + (1-bn_momentum) * batch_var
-
-            self.cache = (input_normalized, input_centered, batch_std)
-
-        else:
-            input_normalized = (input - self.running_mean)/np.sqrt(self.running_var + eps)
-            output = self.gamma * input_normalized + self.beta
-
-        #print('')
-        return output
-    
-    def batchnorm_backward(self, delta):
-
-        #print('start bn backward')
-        output_normalized, output_centered, batch_std = self.cache
-        
-        N,D = delta.shape
-        
-        #print(f'shape of delta:{delta.shape}')
-        #print(f'shape of output_normalized: {output_normalized.shape}')
-        self.grad_gamma = np.sum(delta * output_normalized, axis = 0)
-        self.grad_beta = np.sum(delta, axis = 0)
-
-        dx_normalized = delta * self.gamma
-        dx_centered = dx_normalized / batch_std
-        dmean = np.sum(-dx_centered, axis = 0) + 2/N * np.sum(output_centered, axis=0)
-        dstd = np.sum((dx_normalized * output_centered * - batch_std**(-2)), axis = 0)
-        dvar = dstd / 2/ batch_std
-        dx = dx_centered + (dmean + dvar * 2 * output_centered) / N
-        return dx
-    
-    def adam(self, iter, adam_learning_rate = 0.1, beta1 = 0.9, beta2 = 0.99, eps = 1e-9, adam_switch = True):
-
-        #momentum
-        self.V_dW = beta1 * self.V_dW + (1-beta1) * self.grad_W
-        self.V_db = beta1 * self.V_db + (1-beta1) * self.grad_b
-        
-        #rms prop
-        self.S_dW = beta2 * self.S_dW + (1-beta2) * (self.grad_W ** 2)
-        self.S_db = beta2 * self.S_db + (1-beta2) * (self.grad_b ** 2)
-        
-        #correction
-        self.V_dW = self.V_dW / (1 - (beta1 ** iter))
-        self.V_db = self.V_db / (1 - (beta1 ** iter))
-        self.S_dW = self.S_dW / (1 - (beta2 ** iter))
-        self.S_db = self.S_db / (1 - (beta2 ** iter))
-
-        #calculate adjustments
-        adam_W = adam_learning_rate * self.V_dW / (np.sqrt(self.S_dW)+eps)
-        adam_b = adam_learning_rate * self.V_db / (np.sqrt(self.S_db)+eps)
-        
-        return adam_W, adam_b
+  #calculate adjustments
+  adam_W = adam_learning_rate * self.V_dW / (np.sqrt(self.S_dW)+eps)
+  adam_b = adam_learning_rate * self.V_db / (np.sqrt(self.S_db)+eps)
+  
+  return adam_W, adam_b
 ```
 
 
@@ -368,6 +398,210 @@ class HiddenLayer(object):
   <br>
   We only explore combination which heurestically makes sense
 </p>
+
+**F. PUTTING IT ALL TOGETHER**
+
+- `train loop`: this helper function simplifies the loops used in `fit` below. It consists of forward propagation, cross entropy calculation, backward propagation, and parameter update.
+
+```python
+def train_loop(self, X, y, batch_size, dropout_rate, momentum_gamma, learning_rate, weight_decay, batchnorm_switch, adam_switch, adam_learning_rate):
+               
+  total_loss = 0 
+  batches = 0 
+  
+  for X_batch, y_batch in self.getBatch(X,y,batch_size):
+      # forward pass
+      y_hat = self.forward(X_batch, dropout_rate, batchnorm_switch, is_train = True)
+      
+      # compute loss and gradient
+      loss,delta=self.criterion_cross_entropy(y_batch,y_hat, batch_size)
+
+      #backward pass
+      self.backward(delta, batchnorm_switch)
+
+      # update
+      self.update(momentum_gamma, learning_rate, weight_decay, batchnorm_switch, adam_switch, adam_learning_rate)
+
+      #record batch loss in batch losses
+      batch_loss = np.mean(loss)
+      batches += 1
+      total_loss += batch_loss
+
+  epoch_loss = total_loss / batches
+
+  return epoch_loss
+```
+
+- `fit`: this function executes the training and validation loops until early stopping is triggered, after which the training and validation datasets are combined and training continued until it reaches the same level of training loss.
+
+```python
+def fit(self,X_train,y_train, X_val, y_val, momentum_gamma =0.9, learning_rate=0.1, epochs=100, batch_size =1, weight_decay = 0.01, dropout_rate = 0.0, early_stopping =[5,10], batchnorm_switch = True, adam_switch = True, adam_learning_rate = 0.1):
+    
+    #check if train and val data were provided
+    validate_check = len(X_val) > 0 and len(y_val) > 0
+    if validate_check is False:
+        print('No validation data provided, skipping validation step')
+
+    #instantiate toggles for early_stopping
+    is_early_stop = False
+    last_validation_loss = float('inf') if validate_check else None
+    epoch = 0
+    count = 0
+    MAX_COUNT = early_stopping[0]
+    EVAL_TRIGGER = early_stopping[1]
+
+    # assign X_train and y_train to X and y 
+    X=np.array(X_train)
+    y=np.array(y_train)
+    epoch_losses = []
+    val_losses = []
+    
+    #start adam_counter at 0
+    self.adam_counter = 0
+    
+    for k in range(epochs):
+        epoch_loss = self.train_loop(X, y, batch_size, dropout_rate, momentum_gamma, learning_rate, weight_decay, batchnorm_switch, adam_switch, adam_learning_rate)
+        epoch_losses.append(epoch_loss)
+
+        #implement early stop
+        if validate_check and k % EVAL_TRIGGER == 0:
+            current_validation_loss = self.eval(X_val, y_val, dropout_rate, batchnorm_switch)
+            
+            if current_validation_loss > last_validation_loss:
+                count += 1
+
+                if count == MAX_COUNT:
+                    is_early_stop = True
+                    early_stop_train_score = epoch_loss
+                    break
+            
+            else:
+                last_validation_loss = current_validation_loss
+                count = 0
+
+            if not is_early_stop:
+                val_losses.append(current_validation_loss)
+                
+        epoch += 1
+
+    if validate_check and is_early_stop:
+        X_combined = np.concatenate((X_train, X_val))
+        y_combined = np.concatenate((y_train, y_val))
+
+        while epoch < epochs:
+            epoch +=1
+            epoch_loss = self.train_loop(X_combined, y_combined, batch_size, dropout_rate, momentum_gamma, learning_rate, weight_decay, batchnorm_switch, adam_switch, adam_learning_rate)
+            epoch_losses.append(epoch_loss)
+            
+            if epoch_loss < early_stop_train_score:
+                break
+
+    return epoch_losses, val_losses, epoch
+```
+
+- `predict`: This function allows us to generate predicted output
+
+```python
+# define the prediction function
+    def predict(self, x, dropout_rate, batchnorm_switch):
+        x = np.array(x)
+        output = np.zeros((x.shape[0], 1))  # Prepare output array to store predicted class labels
+        for i in np.arange(x.shape[0]):
+            probabilities = self.forward(x[i, :],dropout_rate, batchnorm_switch, is_train = False)  # Get the softmax probabilities
+            predicted_class = np.argmax(probabilities)  # Choose the class with the highest probability
+            output[i] = int(predicted_class)  # Assign the predicted class to the output array
+        return output
+```
+
+- `eval`: this function calculates validation loss. This is function does similar calculations to `predict` and is sepearated out for code hygiene.
+
+```python
+def eval(self, X_val, y_val, dropout_rate,batchnorm_switch):
+
+  X_val = np.array(X_val)
+  y_val = np.array(y_val)
+  yhat_val = self.forward(X_val, dropout_rate, batchnorm_switch, is_train=False) 
+  val_loss, _ = self.criterion_cross_entropy(y_val,yhat_val, len(y_val))
+  return np.mean(val_loss)
+```
+
+-`Hyperparameter tuning`: this function implements hyperparameter tuning with for loops and is customised to our use case. 
+
+```python
+def hyperparamater_testing(parameters):
+    
+  learning_rates,batch_sizes,early_stopping_combination, epoch_counts, momentum_gammas, weight_decays, dropouts, batchnorm_switches,adam_learning_rates, node_counts,node_activations = parameters
+  sumproduct = (len(learning_rates) * len(batch_sizes) * len(early_stopping_combination) * len(epoch_counts) * len(momentum_gammas) * len(weight_decays) * len(dropouts) * len(batchnorm_switches) * len(adam_learning_rates) * len(node_counts))
+  print(f'Running {sumproduct} cases.')
+
+  assets = []
+  counter = 0
+  for early_stopping in early_stopping_combination:
+      for batch_size in batch_sizes:
+          for lr in learning_rates:
+              for epoch_count in epoch_counts:
+                  for momentum_gamma in momentum_gammas:
+                      for weight_decay in weight_decays:
+                          for dropout in dropouts:
+                              for batchnorm_switch in batchnorm_switches:
+                                  for adam_learning_rate in adam_learning_rates:
+                                      
+                                      if adam_learning_rate > 0:
+                                          adam_switch = True
+                                      else: adam_switch = False
+
+                                      for (node_count, node_activation) in zip(node_counts, node_activations):
+                                          
+                                          nn = MLP(node_count, node_activation)
+
+                                          start_time = time.time()
+
+                                          train_loss, val_loss, epoch = nn.fit(train_data, train_label, val_data, val_label, 
+                                                          momentum_gamma = momentum_gamma, learning_rate = lr, 
+                                                          epochs = epoch_count, batch_size = batch_size, 
+                                                          weight_decay = weight_decay, dropout_rate = dropout, 
+                                                          early_stopping = early_stopping, batchnorm_switch = batchnorm_switch, 
+                                                          adam_switch = adam_switch, adam_learning_rate = adam_learning_rate)
+                                          
+                                          end_time = time.time()
+
+                                          duration = end_time - start_time
+                                          duration_minutes, duration_seconds = int(duration // 60), int(duration % 60)
+
+                                          train_predict = nn.predict(train_data, dropout_rate = 0, batchnorm_switch = batchnorm_switch)
+                                          test_predict = nn.predict(adj_test_data, dropout_rate = 0, batchnorm_switch = batchnorm_switch) 
+                                          
+                                          train_accuracy, train_f1 = accuracy_score(train_label, train_predict), f1_score(train_label, train_predict, average='weighted')
+                                          test_accuracy, test_f1 = accuracy_score(original_test_label, test_predict), f1_score(original_test_label, test_predict, average='weighted')
+                                      
+                                          #print(f"CASE {counter}   >>> duration: {duration_minutes}m{duration_seconds}s")
+
+                                          counter += 1
+                                          assets.append({
+                                              'case': counter,
+                                              'early_stopping': early_stopping,
+                                              'batch_size': batch_size,
+                                              'learning_rate': lr,
+                                              'duration_minutes': duration_minutes,
+                                              'duration_seconds': duration_seconds,
+                                              'epochs': epoch,
+                                              'train_loss': train_loss,
+                                              'val_loss': val_loss,
+                                              'train_accuracy': train_accuracy,
+                                              'train_f1': train_f1,
+                                              'test_accuracy': test_accuracy,
+                                              'test_f1': test_f1,
+                                              'node_count': node_count,
+                                              'node_activation': node_activation,
+                                              'batchnorm_switch': batchnorm_switch,
+                                              'dropout_rate':dropout,
+                                              'weight_decay':weight_decay,
+                                              'adam_learning_rate': adam_learning_rate,
+                                              'momentum_gamma':momentum_gamma
+                                          })
+
+  return assets
+```
 
 **F. EXPERIMENT RESULTS**
 
