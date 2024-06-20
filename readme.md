@@ -24,7 +24,7 @@ We define our quality metrics as a mix of test scores, training speeds, and mode
 
 1. `Test scores`: we track both accuracy and F1-scores for conservatism. We note that accuracy is more appropriate for datasets which are balanced and projects with emphasis on the identification of true positives and true negatives. On the other hand, F1-score is more appropriate for datasets which are imbalanced and the ability to identify true and false positives and negatives is more important. 
 
-  **NOTE**: the absolute values of test scores are meaningless by themselves due to the random nature of our dataset. Test scores are only useful for comparison purposes between two or more models.
+  > **NOTE**: the absolute values of test scores are meaningless by themselves due to the random nature of our dataset. Test scores are only useful for comparison purposes between two or more models.
 
 
 2. `Training speeds`: we focus on employing methods which are efficient with low training speeds.
@@ -55,7 +55,7 @@ Pre-processing notes:
   A simplified view of an MLP network.
 </p>
 
-**Note**: Snippets of base code are provided below to showcase how each component functions. These snippets are taken from the implementation code which is structured as three main classes: (i) **Activations**: this houses all activation functions, (ii) **HiddenLayer**: this houses all methods, (iii) **MLP**: this houses the training, eval, predict functions as well as mini-batch.
+> **Note**: Snippets of base code are provided below to showcase how each component functions. These snippets are taken from the implementation code which is structured as three main classes: (i) **Activations**: this houses all activation functions, (ii) **HiddenLayer**: this houses all methods, (iii) **MLP**: this houses the training, eval, predict functions as well as mini-batch.
 
 
 `Base architecture`: deep learning models consists of input, hidden, and output layers through which information is propagated and processed through. A model may have one or more hidden layers and the choice of optimal number of hidden layers can be determined by considering test scores and run times. Deeper and wider models can learn more parameters from input at higher computational costs, vice versa. As information is propagated through the neural network, each neuron (e.g. a single node in the neural network) takes in one or more input multiplied by weights and adjusted by a bias factor to produce an adjusted input. The adjusted input is then further processed through a non-linear activation function to produce a convex output for that layer. The process outlined below are repeated until all training data has been ingested. A complete cycle of training loop (e.g. when all training data has been used once) is called an `epoch`.
