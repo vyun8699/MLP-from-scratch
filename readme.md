@@ -73,6 +73,65 @@ Here comes the wall of text (sorry!).
 
   - `Softmax`: The softmax function is commonly used in the output layer for multi classifications where a probability value is allocated to classes of the data. 
 
+```python
+class Activation(object):
+  
+    #tanh
+    def __tanh(self, x):
+        return np.tanh(x)
+    def __tanh_deriv(self, a):
+        return 1.0 - a**2
+    
+    #sigmoid/logistic
+    def __logistic(self, x):
+        return 1.0 / (1.0 + np.exp(-x))
+    def __logistic_deriv(self, a):
+        return  a * (1 - a )
+    
+    #relu
+    def __relu(self, x):
+        if np.isnan(x).any() or np.isinf(x).any():
+            print("Detected NaN or Inf in x at relu")
+        return np.maximum(0,x)
+    def __relu_deriv(self, a):
+        return np.where(a>0,1,0)
+    
+    #leaky relu
+    def __lrelu(self,x):
+        return np.maximum(0.01*x,x)
+    
+    def __lrelu_deriv(self, a):
+        return np.where(a>0,1,0.01)
+    
+    #softmax
+    def __softmax(self,x, eps=1e-9): 
+        if np.isnan(x).any() or np.isinf(x).any():
+            print("Detected NaN or Inf in x at softmax")
+        exps = np.exp( x -np.max(x, axis =-1, keepdims = True))
+        
+        return exps / np.sum(exps, axis =-1, keepdims = True) + eps
+
+    def __softmax_deriv(self,yhat, y_one_hot):
+        return yhat - y_one_hot 
+
+    def __init__(self,activation='tanh'):
+        if activation == 'logistic':
+            self.f = self.__logistic
+            self.f_deriv = self.__logistic_deriv
+        elif activation == 'tanh':
+            self.f = self.__tanh
+            self.f_deriv = self.__tanh_deriv
+        elif activation == 'relu':
+            self.f = self.__relu
+            self.f_deriv = self.__relu_deriv
+        elif activation == 'softmax':
+            self.f = self.__softmax
+            self.f_deriv = self.__softmax_deriv
+        elif activation == 'lrelu':
+            self.f = self.__lrelu
+            self.f_deriv = self.__lrelu_deriv
+```
+
 **D. METHODS USED IN THIS PROJECT**
 
 To speed up the training process and increase model robustness, several methods can be used:
@@ -110,6 +169,195 @@ To speed up the training process and increase model robustness, several methods 
   </p>
 
    - `ADAM optimisation`: ADAM is an optimization technique created to utilise first and second moments to adapt the learning rate. Compared to the previous optimisation    technique such as RMSprop and AdaGrad where only the second moment is used, the ADAM optimisation converges quicker and develop resistance to noise in a dataset. ADAM optimizers contain the capabilities from SGD with momentum as well as RMSprop, which means it could decrease and increase the learning rate through the manipulation of the beta values depending on how large the gradient is.
+
+```python
+class HiddenLayer(object):    
+    
+    def __init__(self,n_in, n_out, activation_last_layer='softmax',activation='relu', W=None, b=None, batch_size = 1, batchnorm_switch = True):
+        
+        self.input=None
+        self.activation=Activation(activation).f
+        
+        # activation deriv of last layer
+        self.activation_deriv=None
+        if activation_last_layer:
+            self.activation_deriv=Activation(activation_last_layer).f_deriv
+
+        # Set Weight to small values
+        self.W = np.random.uniform(
+                low=-np.sqrt(6. / (n_in + n_out)),
+                high=np.sqrt(6. / (n_in + n_out)),
+                size=(n_in, n_out)
+        )
+
+        # Set bias to zero, dimension to match output 
+        self.b = np.zeros(n_out,)
+        
+        # we set the size of weight and bias gradients
+        self.grad_W = np.zeros(self.W.shape)
+        self.grad_b = np.zeros(self.b.shape)
+        
+        #initialize momentum to zero, match size to weight and bias
+        self.V_W = np.zeros(self.W.shape)
+        self.V_b = np.zeros(self.b.shape)
+
+        #initialize dropout mask to None
+        self.dropout_mask = None
+
+        #initialize parameters for batch normalization (gamma = scale, beta = shift)
+        self.gamma = None
+        self.beta = None
+        self.grad_gamma = None
+        self.grad_beta = None
+        self.running_mean = np.zeros((batch_size,n_out)) #running mean value for each layer, to be used in val and test
+        self.running_var = np.zeros((batch_size,n_out)) #running var value for each layer, to be used in val and test
+        self.cache = None
+
+        #initialize adam (momentum and RMS prop)
+        self.V_dW = np.zeros(self.W.shape)
+        self.S_dW = np.zeros(self.W.shape)
+        self.V_db = np.zeros(self.b.shape)
+        self.S_db = np.zeros(self.b.shape)
+ 
+    def forward(self, input, dropout_rate, is_train = True, batchnorm_switch = True):
+
+        #linear transformation
+        lin_output = np.dot(input, self.W) + self.b 
+        
+        #batchnorm
+        if batchnorm_switch:
+            lin_output = self.batchnorm_forward(lin_output, is_train)
+            #print(f'shape of batchnorm output: {lin_output.shape}')
+
+        self.output = lin_output
+
+        #dropout
+        self.dropout(is_train, dropout_rate)
+        
+        if self.activation:
+            self.output = self.activation(self.output)
+        
+        self.input=input
+
+        return self.output
+    
+    def backward(self, delta, batchnorm_switch):         
+
+        #gradient
+        self.grad_W = np.dot(np.atleast_2d(self.input).T, np.atleast_2d(delta))
+        self.grad_b = np.sum(delta, axis = 0) 
+
+        #dropout
+        delta *= self.dropout_mask
+
+        #batchnorm
+        if batchnorm_switch:
+            delta = self.batchnorm_backward(delta)
+
+        #linear transformation
+        if self.activation_deriv: 
+            delta = np.dot(delta, self.W.T) * self.activation_deriv(self.input)
+
+    
+        return delta
+    
+    def momentum(self, momentum_gamma, lr):
+        
+        self.V_W = momentum_gamma * self.V_W + lr * self.grad_W
+        self.V_b = momentum_gamma * self.V_b + lr * self.grad_b 
+
+    def weightdecay(self, lr, weight_decay):
+        self.W += lr * (weight_decay * self.W)
+
+    def dropout(self, is_train, dropout_rate):
+        
+        if is_train and dropout_rate > 0.0:
+            self.dropout_mask = (np.random.rand(*self.output.shape) < (1 - dropout_rate))
+            if np.isnan(self.dropout_mask).any() or np.isinf(self.dropout_mask).any():
+                print("Detected NaN or Inf in dropout_mask in dropout")
+            
+        else:
+            self.dropout_mask = np.ones_like(self.output)        
+
+        self.output *= self.dropout_mask
+        self.output *= 1/(1-dropout_rate)
+    
+    def batchnorm_forward(self,input, is_train = True, bn_momentum = 0.9, eps = 1e-9):
+
+        if self.gamma is None:
+            self.gamma = np.ones((input.shape[-1]))
+            self.beta = np.zeros((input.shape[-1]))
+            self.grad_gamma = np.ones((input.shape))
+            self.grad_beta = np.zeros((input.shape[-1]))
+
+        if is_train:
+            #calculate mean, variance, and normalized input
+            batch_mean = np.mean(input, axis = 0)
+            batch_var = np.var(input, axis = 0)
+            batch_std = np.sqrt(batch_var + eps)
+            input_centered = input - batch_mean
+            input_normalized = input_centered/np.sqrt(batch_var + eps) #epsilon introduced to avoid divide by zero
+
+            #use self.cache so values can be reused during backward pass
+            self.cache = (input, input_normalized, batch_mean, batch_var)
+
+            output = input_normalized * self.gamma + self.beta
+
+            self.running_mean = bn_momentum * self.running_mean + (1-bn_momentum) * batch_mean
+            self.running_var = bn_momentum * self.running_var + (1-bn_momentum) * batch_var
+
+            self.cache = (input_normalized, input_centered, batch_std)
+
+        else:
+            input_normalized = (input - self.running_mean)/np.sqrt(self.running_var + eps)
+            output = self.gamma * input_normalized + self.beta
+
+        #print('')
+        return output
+    
+    def batchnorm_backward(self, delta):
+
+        #print('start bn backward')
+        output_normalized, output_centered, batch_std = self.cache
+        
+        N,D = delta.shape
+        
+        #print(f'shape of delta:{delta.shape}')
+        #print(f'shape of output_normalized: {output_normalized.shape}')
+        self.grad_gamma = np.sum(delta * output_normalized, axis = 0)
+        self.grad_beta = np.sum(delta, axis = 0)
+
+        dx_normalized = delta * self.gamma
+        dx_centered = dx_normalized / batch_std
+        dmean = np.sum(-dx_centered, axis = 0) + 2/N * np.sum(output_centered, axis=0)
+        dstd = np.sum((dx_normalized * output_centered * - batch_std**(-2)), axis = 0)
+        dvar = dstd / 2/ batch_std
+        dx = dx_centered + (dmean + dvar * 2 * output_centered) / N
+        return dx
+    
+    def adam(self, iter, adam_learning_rate = 0.1, beta1 = 0.9, beta2 = 0.99, eps = 1e-9, adam_switch = True):
+
+        #momentum
+        self.V_dW = beta1 * self.V_dW + (1-beta1) * self.grad_W
+        self.V_db = beta1 * self.V_db + (1-beta1) * self.grad_b
+        
+        #rms prop
+        self.S_dW = beta2 * self.S_dW + (1-beta2) * (self.grad_W ** 2)
+        self.S_db = beta2 * self.S_db + (1-beta2) * (self.grad_b ** 2)
+        
+        #correction
+        self.V_dW = self.V_dW / (1 - (beta1 ** iter))
+        self.V_db = self.V_db / (1 - (beta1 ** iter))
+        self.S_dW = self.S_dW / (1 - (beta2 ** iter))
+        self.S_db = self.S_db / (1 - (beta2 ** iter))
+
+        #calculate adjustments
+        adam_W = adam_learning_rate * self.V_dW / (np.sqrt(self.S_dW)+eps)
+        adam_b = adam_learning_rate * self.V_db / (np.sqrt(self.S_db)+eps)
+        
+        return adam_W, adam_b
+```
+
 
 **E. EXPERIMENT PROTOCOL**
 
